@@ -325,7 +325,7 @@ static MainMenuItem items[5] =
 		 "\x1b[41;1m\x1b[30m", // Black on light red
 		 delete},
 
-		{"Export (text)",
+		{"Export",
 		 "\x1b[33;1m", // light yellow
 		 export},
 

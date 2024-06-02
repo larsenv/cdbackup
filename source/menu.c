@@ -11,9 +11,10 @@ void DrawHeading(void)
     CON_GetMetrics(&conX, &conY);
 
     // Draw a nice heading.
-    puts("cdbackup " VERSION ", by thepikachugamer");
+    puts("cdbackup mod " VERSION ", by thepikachugamer, modded by Larsenv");
     puts("Backup/restore/export your Wii Message Board data.");
-    for (int i = 0; i < conX; i++) putchar(0xcd); // backup ahaha funny
+    for (int i = 0; i < conX; i++)
+        putchar(0xcd);
 }
 
 int MainMenu(int argc; MainMenuItem argv[argc], int argc)
@@ -22,14 +23,16 @@ int MainMenu(int argc; MainMenuItem argv[argc], int argc)
     int x = 0;
     while (true)
     {
-        MainMenuItem* item = argv + x;
+        MainMenuItem *item = argv + x;
 
         clear();
         DrawHeading();
-        for (MainMenuItem* i = argv; i < argv + argc; i++)
+        for (MainMenuItem *i = argv; i < argv + argc; i++)
         {
-            if (i == item) printf("%s>>  %s\x1b[40m\x1b[39m\n", i->highlight_str, i->name);
-            else printf("    %s\n", i->name);
+            if (i == item)
+                printf("%s>>  %s\x1b[40m\x1b[39m\n", i->highlight_str, i->name);
+            else
+                printf("    %s\n", i->name);
         }
 
         while (true)
@@ -38,32 +41,40 @@ int MainMenu(int argc; MainMenuItem argv[argc], int argc)
 
             if (input_pressed(up))
             {
-                if (x-- == 0) x = argc - 1;
+                if (x-- == 0)
+                    x = argc - 1;
                 break;
-            } else
+            }
+            else
 
-            if (input_pressed(down))
+                if (input_pressed(down))
             {
-                if (++x == argc) x = 0;
+                if (++x == argc)
+                    x = 0;
                 break;
-            } else
+            }
+            else
 
-            if (input_pressed(a))
+                if (input_pressed(a))
             {
-                if (!item->action) return 0;
+                if (!item->action)
+                    return 0;
 
                 clear();
                 DrawHeading();
                 item->action();
 
                 puts("\nPress any button to continue...");
-                do input_scan(); while (!input_btns);
+                do
+                    input_scan();
+                while (!input_btns);
 
                 clear();
                 break;
-            } else
+            }
+            else
 
-            if (input_pressed(b) || input_pressed(home))
+                if (input_pressed(b) || input_pressed(home))
             {
                 return 0;
             }
