@@ -10,8 +10,9 @@
 #include <gccore.h>
 #include <wiiuse/wpad.h>
 #include <ogc/isfs.h>
-#include <libpatcher.h>
+#include "libpatcher.h"
 #include <fat.h>
+#include "odh.h"
 
 #include "config.h"
 
@@ -22,10 +23,12 @@
 #include "vff.h"
 #include "cdbfile.h"
 
-int backup() {
+int backup()
+{
 	char filepath[PATH_MAX];
 	sprintf(filepath, "%s:%s", GetActiveDeviceName(), FAT_TARGET);
-	if (!FAT_GetFileSize(filepath, 0)) {
+	if (!FAT_GetFileSize(filepath, 0))
+	{
 		if (!confirmation("Backup file already exists, do you want to overwrite it?", 2))
 			return user_abort;
 	}
@@ -33,27 +36,31 @@ int backup() {
 	return NANDBackupFile(NAND_TARGET, filepath);
 }
 
-int restore() {
+int restore()
+{
 	size_t filesize = 0;
 	struct VFFHeader header = {};
 
 	char filepath[PATH_MAX];
 	sprintf(filepath, "%s:%s", GetActiveDeviceName(), FAT_TARGET);
-	if (FAT_GetFileSize(filepath, &filesize) < 0) {
+	if (FAT_GetFileSize(filepath, &filesize) < 0)
+	{
 		puts("Failed to get backup file size, does it exist?");
 		perror("Error details");
 
 		return -errno;
 	}
 
-	if (FAT_Read(filepath, &header, sizeof(header), 0, 0) < 0) {
+	if (FAT_Read(filepath, &header, sizeof(header), 0, 0) < 0)
+	{
 		puts("Failed to read VFF header!");
 		perror("Error details");
 
 		return -errno;
 	}
 
-	if (!sanityCheckVFFHeader(&header, filesize)) {
+	if (!sanityCheckVFFHeader(&header, filesize))
+	{
 		puts("Bad VFF header!");
 
 		return -EBADF;
@@ -65,30 +72,35 @@ int restore() {
 	return NANDRestoreFile(filepath, NAND_TARGET);
 }
 
-int delete() {
+int delete()
+{
 	int ret;
-	if ((ret = NAND_GetFileSize(NAND_TARGET, 0)) < 0) {
+	if ((ret = NAND_GetFileSize(NAND_TARGET, 0)) < 0)
+	{
 		printf("Failed to get file size**, did you delete it already? (%i)\n", ret);
 		return ret;
 	}
 
-	if(!confirmation("Are you sure you want to delete your message board data??", 6))
+	if (!confirmation("Are you sure you want to delete your message board data??", 6))
 		return user_abort;
 
-	printf (">> Deleting %s from NAND... ", NAND_TARGET);
+	printf(">> Deleting %s from NAND... ", NAND_TARGET);
 	ret = ISFS_Delete(NAND_TARGET);
-	if (ret == -106) {
+	if (ret == -106)
+	{
 		puts("You already deleted it.");
 		return 0;
 	}
 
-	else if (ret < 0) printf("Error! (%d)", ret);
-	else printf("OK!\n");
+	else if (ret < 0)
+		printf("Error! (%d)", ret);
+	else
+		printf("OK!\n");
 
 	return ret;
 }
 
-static int export_cb(const char* path, FILINFO* st)
+static int export_cb(const char *path, FILINFO *st)
 {
 	int res;
 
@@ -97,12 +109,13 @@ static int export_cb(const char* path, FILINFO* st)
 	struct tm tm_sendtime = {};
 
 	FIL fp[1];
-	struct CDBAttrHeader* cdbattr = NULL;
-	struct CDBFILE* cdbfile = NULL;
+	struct CDBAttrHeader *cdbattr = NULL;
+	struct CDBFILE *cdbfile = NULL;
 	char outpath[PATH_MAX];
-	FILE* text = NULL;
+	FILE *text = NULL;
 
-	if (!strcmp(st->fname, "cdb.conf")) return 0;
+	if (!strcmp(st->fname, "cdb.conf"))
+		return 0;
 
 	if (!sscanf(st->fname, "%X.000", &sendtime_x))
 	{
@@ -139,7 +152,7 @@ static int export_cb(const char* path, FILINFO* st)
 
 	char timestr[30];
 	char datetimestr[60];
-	static const char mon[12][4] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+	static const char mon[12][4] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 	strftime(datetimestr, sizeof(datetimestr), "%F %r", &tm_sendtime);
 	strftime(timestr, sizeof(timestr), "%p %I.%M.%S", &tm_sendtime);
@@ -148,62 +161,86 @@ static int export_cb(const char* path, FILINFO* st)
 
 	printf("Processing: %s %s\n", datetimestr, cdbattr->description);
 
-	char* ptr = strchr(outpath, '/') + 1;
+	char *ptr = strchr(outpath, '/') + 1;
 
 	while ((ptr = strchr(ptr, '/')))
 	{
 		ptr[0] = 0;
-		if (mkdir(outpath, 0644) < 0 && errno != EEXIST) goto error;
+		if (mkdir(outpath, 0644) < 0 && errno != EEXIST)
+			goto error;
 		ptr[0] = '/';
 		ptr++;
 	}
 
 	text = fopen(outpath, "wb");
-	if (!text) goto error;;
-	static uint16_t bom[] = { 0xFEFF }, newlines[] = { '\n', '\n' };
+	if (!text)
+		goto error;
+	;
+	static uint16_t bom[] = {0xFEFF}, newlines[] = {'\n', '\n'};
 	fwrite(bom, 1, sizeof(bom), text);
 
-	uint16_t* start;
+	uint16_t *start;
 	unsigned count;
-	for (start = (void*)cdbfile + cdbfile->desc_offset, count = 0;
+	for (start = (void *)cdbfile + cdbfile->desc_offset, count = 0;
 		 start[count] != 0x0000;
-		 count++);
+		 count++)
+		;
 
-	if (!fwrite(start, sizeof(uint16_t), count, text)) goto error;
+	if (!fwrite(start, sizeof(uint16_t), count, text))
+		goto error;
 
-	if (!fwrite(newlines, sizeof(newlines), 1, text)) goto error;
+	if (!fwrite(newlines, sizeof(newlines), 1, text))
+		goto error;
 
-	for (start = (void*)cdbfile + cdbfile->body_offset, count = 0;
+	for (start = (void *)cdbfile + cdbfile->body_offset, count = 0;
 		 start[count] != 0x0000;
-		 count++);
+		 count++)
+		;
 
-	if (!fwrite(start, sizeof(uint16_t), count, text)) goto error;
+	if (!fwrite(start, sizeof(uint16_t), count, text))
+		goto error;
 
 	fclose(text);
 
 	if (cdbfile->attachment_offset)
 	{
-		const char* ext;
-		uint32_t attachment_magic = (*(uint32_t*)((void*)cdbfile + cdbfile->attachment_offset));
+		bool attachment_ajpg = false;
+
+		const char *ext;
+		uint32_t attachment_magic = (*(uint32_t *)((void *)cdbfile + cdbfile->attachment_offset));
 		switch (attachment_magic)
 		{
-			case 0x55AA382D: ext = "U8";	break;
-			case 0x30335F30: ext = "ptm";	break;
-			case 0x414A5047: ext = "ajpg";	break;
-
-			default: ext = "bin"; break;
+		case 0x55AA382D:
+			ext = "U8";
+			break;
+		case 0x30335F30:
+			ext = "ptm";
+			break;
+		case 0x414A5047:
+			ext = "png";
+			attachment_ajpg = true;
+			sprintf(strrchr(outpath, '.'), "-attachment.%s", ext);
+			decode((uint8_t *)cdbfile, cdbfile->attachment_size, cdbfile->attachment_offset, (char *)outpath);
+			break;
+		default:
+			ext = "bin";
+			break;
 		}
 
-		sprintf(strrchr(outpath, '.'), "-attachment.%s", ext);
-		text = fopen(outpath, "wb");
-		if (!text) goto error;
+		if (!attachment_ajpg)
+		{
+			sprintf(strrchr(outpath, '.'), "-attachment.%s", ext);
+			text = fopen(outpath, "wb");
+			if (!text)
+				goto error;
 
-		if (!fwrite((void*)cdbfile + cdbfile->attachment_offset, cdbfile->attachment_size, 1, text)) goto error;
-		fclose(text);
+			if (!fwrite((void *)cdbfile + cdbfile->attachment_offset, cdbfile->attachment_size, 1, text))
+				goto error;
+			fclose(text);
+		}
 	}
 
 	goto finish;
-
 
 error:
 	res = -errno;
@@ -211,11 +248,12 @@ error:
 
 finish:
 	free(cdbattr);
-	if (text) fclose(text);
+	if (text)
+		fclose(text);
 	return res;
 }
 
-static int copytree(const char* src, int (*callback)(const char*, FILINFO*))
+static int copytree(const char *src, int (*callback)(const char *, FILINFO *))
 {
 	char path[256];
 
@@ -224,12 +262,13 @@ static int copytree(const char* src, int (*callback)(const char*, FILINFO*))
 	FILINFO st;
 
 	fres = f_opendir(dp, src);
-	if (fres != FR_OK) {
+	if (fres != FR_OK)
+	{
 		printf("f_opendir failed! (%i)\n", fres);
 		return fres;
 	}
 
-	while ( ((fres = f_readdir(dp, &st)) == FR_OK) && st.fname[0] )
+	while (((fres = f_readdir(dp, &st)) == FR_OK) && st.fname[0])
 	{
 		sprintf(path, "%s/%s", src, st.fname);
 
@@ -251,8 +290,9 @@ int export(void)
 
 	char filepath[PATH_MAX];
 	sprintf(filepath, "%s:%s", GetActiveDeviceName(), FAT_TARGET);
-	FILE* fp = fopen(filepath, "rb");
-	if (!fp) {
+	FILE *fp = fopen(filepath, "rb");
+	if (!fp)
+	{
 		perror(filepath);
 		return -errno;
 	}
@@ -271,41 +311,30 @@ int export(void)
 	return ret;
 }
 
-
 static MainMenuItem items[5] =
+	{
+		{"Backup",
+		 "\x1b[32;1m", // light green
+		 backup},
+
+		{"Restore",
+		 "\x1b[31;1m", // light red
+		 restore},
+
+		{"Delete",
+		 "\x1b[41;1m\x1b[30m", // Black on light red
+		 delete},
+
+		{"Export (text)",
+		 "\x1b[33;1m", // light yellow
+		 export},
+
+		{"Exit",
+		 "",
+		 NULL}};
+
+int main()
 {
-	{
-		"Backup",
-		"\x1b[32;1m", // light green
-		backup
-	},
-
-	{
-		"Restore",
-		"\x1b[31;1m", // light red
-		restore
-	},
-
-	{
-		"Delete",
-		"\x1b[41;1m\x1b[30m", // Black on light red
-		delete
-	},
-
-	{
-		"Export (text)",
-		"\x1b[33;1m", // light yellow
-		export
-	},
-
-	{
-		"Exit",
-		"",
-		NULL
-	}
-};
-
-int main() {
 	bool ok = (patch_ahbprot_reset() && patch_isfs_permissions());
 	WPAD_Init();
 	PAD_Init();
@@ -317,12 +346,10 @@ int main() {
 		sleep(2);
 	}
 
-
 	if (!FATMount())
 		quit(-ENODEV);
 
 	quit(MainMenu(items, 5));
-
 
 	return 0;
 }
