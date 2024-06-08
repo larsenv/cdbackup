@@ -13,6 +13,9 @@
 #include "libpatcher.h"
 #include <fat.h>
 #include "odh.h"
+#include "dirent.h"
+#include "aes.h"
+#include <setjmp.h>
 
 #include "config.h"
 
@@ -22,6 +25,8 @@
 #include "fs.h"
 #include "vff.h"
 #include "cdbfile.h"
+
+jmp_buf exception_env;
 
 int backup()
 {
@@ -98,6 +103,54 @@ int delete()
 		printf("OK!\n");
 
 	return ret;
+}
+
+void listFiles(const char *path)
+{
+	struct dirent *entry;
+	DIR *dp = opendir(path);
+
+	if (dp == NULL)
+	{
+		perror("opendir");
+		return;
+	}
+
+	while ((entry = readdir(dp)))
+	{
+		char full_path[PATH_MAX];
+		struct stat statbuf;
+
+		// Ignore "." and ".."
+		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+		{
+			continue;
+		}
+
+		snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+		if (stat(full_path, &statbuf) == -1)
+		{
+			perror("stat");
+			continue;
+		}
+
+		if (S_ISDIR(statbuf.st_mode))
+		{
+			// Recursively traverse subdirectory
+			listFiles(full_path);
+		}
+		else if (S_ISREG(statbuf.st_mode))
+		{
+			// Check if the filename length is 12 bytes
+			if (strlen(entry->d_name) == 12)
+			{
+				export_sd(full_path);
+			}
+		}
+	}
+
+	closedir(dp);
 }
 
 static int export_cb(const char *path, FILINFO *st)
@@ -181,6 +234,7 @@ static int export_cb(const char *path, FILINFO *st)
 
 	uint16_t *start;
 	unsigned count;
+
 	for (start = (void *)cdbfile + cdbfile->desc_offset, count = 0;
 		 start[count] != 0x0000;
 		 count++)
@@ -253,6 +307,206 @@ finish:
 	return res;
 }
 
+bool is_ascii(const char *str)
+{
+	while (*str)
+	{
+		if (*str < 0 || *str > 127)
+		{
+			return false;
+		}
+		str++;
+	}
+	return true;
+}
+
+void export_sd(char *name)
+{
+	FILE *pFile = fopen(name, "rb");
+	if (!pFile)
+	{
+		perror("Failed to open file");
+		return;
+	}
+
+	fseek(pFile, 0, SEEK_END);
+	int fileSize = ftell(pFile);
+	fseek(pFile, 0, SEEK_SET);
+
+	uint8_t *buffer = (uint8_t *)malloc(fileSize);
+	if (!buffer)
+	{
+		perror("Failed to allocate memory");
+		fclose(pFile);
+		return;
+	}
+
+	fread(buffer, 1, fileSize, pFile);
+	fclose(pFile);
+
+	uint8_t *attr = buffer;
+	uint8_t *src = buffer + 0x400;
+
+	struct CDBAttrHeader *cdbattr = (struct CDBAttrHeader *)attr;
+
+	uint8_t key[16] = {0}; // Placeholder for the key
+	struct AES_ctx str;
+	AES_init_ctx_iv(&str, key, cdbattr->iv);
+	AES_CBC_decrypt_buffer(&str, src, fileSize - 0x400);
+
+	uint8_t *decryptedBuffer = (uint8_t *)malloc(fileSize);
+	if (!decryptedBuffer)
+	{
+		perror("Failed to allocate memory for decryptedBuffer");
+		free(buffer);
+		return;
+	}
+
+	memcpy(decryptedBuffer, src, fileSize - 0x400);
+
+	struct CDBFILE *cdbfile = (struct CDBFILE *)decryptedBuffer;
+
+	uint32_t sendtime_x = 0;
+	time_t sendtime;
+	struct tm tm_sendtime = {};
+
+	char *nameFile = strrchr(name, '/');
+
+	if (!nameFile || !sscanf(nameFile + 1, "%X.000", &sendtime_x))
+	{
+		printf("%s: Invalid file name(?)\n", name);
+		free(decryptedBuffer);
+		free(buffer);
+		return;
+	}
+
+	sendtime = SECONDS_TO_2000 + sendtime_x;
+	gmtime_r(&sendtime, &tm_sendtime);
+
+	uint8_t *buf = (uint8_t *)malloc(fileSize);
+	if (buf == NULL)
+	{
+		fprintf(stderr, "Error: Failed to allocate memory.\n");
+		free(decryptedBuffer);
+		free(buffer);
+		return;
+	}
+
+	memcpy(buf, attr, fileSize);
+
+	if (!is_ascii(cdbattr->description))
+	{
+		free(buf);
+		free(decryptedBuffer);
+		free(buffer);
+		return;
+	}
+	else
+	{
+		memmove(cdbattr->description + 1, cdbattr->description, strlen(cdbattr->description) + 1);
+		cdbattr->description[0] = ' ';
+	}
+
+	char timestr[30];
+	char datetimestr[60];
+	static const char mon[12][4] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+	strftime(datetimestr, sizeof(datetimestr), "%F %r", &tm_sendtime);
+	strftime(timestr, sizeof(timestr), "%p %I.%M.%S", &tm_sendtime);
+	char outpath[PATH_MAX];
+	sprintf(outpath, "%s:/cdb/%i/%s/%02i/%s%s.txt", GetActiveDeviceName(), tm_sendtime.tm_year + 1900, mon[tm_sendtime.tm_mon],
+			tm_sendtime.tm_mday, timestr, cdbattr->description);
+
+	printf("Processing SD: %s%s\n", datetimestr, cdbattr->description);
+
+	char outpath1[PATH_MAX];
+	sprintf(outpath1, "%s:/cdb", GetActiveDeviceName(), tm_sendtime.tm_year + 1900);
+	mkdir(outpath1, 0644);
+	sprintf(outpath1, "%s:/cdb/%i", GetActiveDeviceName(), tm_sendtime.tm_year + 1900);
+	mkdir(outpath1, 0644);
+	sprintf(outpath1, "%s:/cdb/%i/%s", GetActiveDeviceName(), tm_sendtime.tm_year + 1900, mon[tm_sendtime.tm_mon]);
+	mkdir(outpath1, 0644);
+	sprintf(outpath1, "%s:/cdb/%i/%s/%02i", GetActiveDeviceName(), tm_sendtime.tm_year + 1900, mon[tm_sendtime.tm_mon],
+			tm_sendtime.tm_mday);
+	mkdir(outpath1, 0644);
+
+	FILE *text = fopen(outpath, "wb");
+
+	if (!text)
+	{
+		perror("Failed to create output file");
+		free(buf);
+		free(decryptedBuffer);
+		free(buffer);
+		return;
+	}
+
+	static uint16_t bom[] = {0xFEFF}, newlines[] = {'\n', '\n'};
+	fwrite(bom, 1, sizeof(bom), text);
+
+	uint16_t *start;
+	unsigned count;
+
+	for (start = (void *)cdbfile + cdbfile->desc_offset, count = 0; start[count] != 0x0000; count++)
+		;
+
+	fwrite(start, sizeof(uint16_t), count, text);
+	fwrite(newlines, sizeof(newlines), 1, text);
+
+	for (start = (void *)cdbfile + cdbfile->body_offset, count = 0; start[count] != 0x0000; count++)
+		;
+
+	fwrite(start, sizeof(uint16_t), count, text);
+
+	fclose(text);
+
+	if (cdbfile->attachment_offset)
+	{
+		bool attachment_ajpg = false;
+		const char *ext;
+		uint32_t attachment_magic = (*(uint32_t *)((void *)cdbfile + cdbfile->attachment_offset));
+
+		switch (attachment_magic)
+		{
+		case 0x55AA382D:
+			ext = "U8";
+			break;
+		case 0x30335F30:
+			ext = "ptm";
+			break;
+		case 0x414A5047:
+			ext = "png";
+			attachment_ajpg = true;
+			sprintf(strrchr(outpath, '.'), "-attachment.%s", ext);
+			decode((uint8_t *)cdbfile, cdbfile->attachment_size, cdbfile->attachment_offset, (char *)outpath);
+			break;
+		default:
+			ext = "bin";
+			break;
+		}
+
+		if (!attachment_ajpg)
+		{
+			sprintf(strrchr(outpath, '.'), "-attachment.%s", ext);
+			text = fopen(outpath, "wb");
+
+			if (text)
+			{
+				fwrite((void *)cdbfile + cdbfile->attachment_offset, cdbfile->attachment_size, 1, text);
+				fclose(text);
+			}
+			else
+			{
+				perror("Failed to create attachment file");
+			}
+		}
+	}
+
+	free(buf);
+	free(buffer);
+	free(decryptedBuffer);
+}
+
 static int copytree(const char *src, int (*callback)(const char *, FILINFO *))
 {
 	char path[256];
@@ -296,6 +550,8 @@ int export(void)
 		perror(filepath);
 		return -errno;
 	}
+
+	listFiles("sd:/private/wii/title/HAEA/");
 
 	f_mount(&fs, "vff:", 0);
 

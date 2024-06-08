@@ -6027,6 +6027,7 @@ int decode(uint8_t *cdbfile, uint32_t attachment_size, uint32_t attachment_offse
 
     std::vector<u8>
         dst = std::vector<u8>(GBAOdh.getOdhWidth(src) * GBAOdh.getOdhHeight(src) * 4);
+
     std::vector<u8> work = std::vector<u8>(GBAOdh.getOdhWidth(src) * GBAOdh.getOdhHeight(src) * 3);
 
     // int abc = ODHDecodeY8U8V8(src.data(), dst.data(), (u8 *)work);
@@ -6039,11 +6040,13 @@ int decode(uint8_t *cdbfile, uint32_t attachment_size, uint32_t attachment_offse
 
     FILE *outputFilez = fopen(outpath, "wb");
 
-    // Write the buffer content to the output file
     fwrite(ctx, (dst.size() / 2), 1, outputFilez);
 
-    // Close the output file
     fclose(outputFilez);
+
+    free(pngbuffer);
+
+    free(src);
 
     return 0;
 }
