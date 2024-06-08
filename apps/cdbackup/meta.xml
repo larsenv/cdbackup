@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
 	<name>cdbackup mod</name>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 	<release_date>20231105004800</release_date>
 	<coder>thepikachugamer, Larsenv</coder>
 	<short_description>Backup/restore/export Wii message board data and images.</short_description>
