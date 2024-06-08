@@ -2,11 +2,11 @@
  * Observations from giantpune's mailboxbomb code.
  */
 
-#define SECONDS_TO_2000		946684800ULL
+#define SECONDS_TO_2000 946684800ULL
 
 struct CDBFILE
 {
-	/* 0x000 */ char magic[4]; // 0x52495f35 'RI_5'
+	/* 0x000 */ char magic[4];		// 0x52495f35 'RI_5'
 	/* 0x004 */ float pos_x, pos_y; // are these floats?
 	/* 0x00c */ uint32_t type;
 	/* 0x010 */ uint64_t send_time; // in ticks!?
@@ -27,7 +27,7 @@ struct CDBFILE
 struct CDBAttrHeader
 {
 	/* 0x00 */ char magic[7];	// "CDBFILE"
-	/* 0x07 */ uint8_t version;	// ? like it's 0x02
+	/* 0x07 */ uint8_t version; // ? like it's 0x02
 
 	/*
 	 * How to calculate the wii ID:
@@ -44,14 +44,14 @@ struct CDBAttrHeader
 	 * 	  That's the HMAC key!    ^^^^^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^
 	 */
 	/* 0x08 */ uint64_t wii_id;
-	/* 0x10 */ uint8_t description_len;	// Length of description string incl. null byte
+	/* 0x10 */ uint8_t description_len; // Length of description string incl. null byte
 	/* 0x11 */ char unk1[3];
 	/* 0x14 */ char description[0x70 - 0x14];
 
-	/* 0x70 */ uint32_t entry_id;		// "/cdb.conf value".
+	/* 0x70 */ uint32_t entry_id; // "/cdb.conf value".
 	/* 0x74 */ uint32_t edit_count;
 	/* 0x78 */ uint32_t file_size;		// {1}
-	/* 0x7c */ uint32_t last_edit_time;	// This is also the file name (in hex)
+	/* 0x7c */ uint32_t last_edit_time; // This is also the file name (in hex)
 	/* 0x80 */ char keystring[0x20];	// ? {1}
 	/* 0xA0 */ unsigned char iv[16];	// {1} {2}
 	/* 0xB0 */ unsigned char sha1_hmac[20];
@@ -66,5 +66,3 @@ _Static_assert(sizeof(struct CDBAttrHeader) == 0x400, "Fix the padding");
  *
  * {2}: The key is all zeroes it seems.
  */
-
-
