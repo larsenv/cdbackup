@@ -3,5 +3,4 @@
 
 Backs up/restores (or deletes) `/title/00000001/00000002/data/cdb.vff` to/from your SD card as `cdbackup.vff`. That's all.
 
-~~I want to find out how to read those .000 files.~~
-I know how to read those .000 files. now how do i read the AJPG files in them
+This version is modded and lets you export Wii Message Board images and also Wii Message Board data transferred to the SD with the Wii Menu
