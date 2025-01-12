@@ -352,6 +352,8 @@ static int export_cb(const char *path, FILINFO *st)
 
 		if (!attachment_ajpg)
 		{
+			sprintf(strrchr(outpath, '.'), "-attachment.%s", ext);
+
 			text = fopen(outpath, "wb");
 			if (!text)
 				goto error;
@@ -360,15 +362,6 @@ static int export_cb(const char *path, FILINFO *st)
 				goto error;
 			fclose(text);
 		}
-
-		sprintf(strrchr(outpath, '.'), "-attachment.%s", ext);
-		text = fopen(outpath, "wb");
-		if (!text)
-			goto error;
-
-		if (!fwrite((void *)cdbfile + cdbfile->attachment_offset, cdbfile->attachment_size, 1, text))
-			goto error;
-		fclose(text);
 	}
 
 	goto finish;
@@ -558,7 +551,6 @@ void export_sd(char *name)
 		bool attachment_ajpg = false;
 		const char *ext;
 		uint32_t attachment_magic = (*(uint32_t *)((void *)cdbfile + cdbfile->attachment_offset));
-
 		switch (attachment_magic)
 		{
 		case 0x55AA382D:
@@ -581,17 +573,14 @@ void export_sd(char *name)
 		if (!attachment_ajpg)
 		{
 			sprintf(strrchr(outpath, '.'), "-attachment.%s", ext);
-			text = fopen(outpath, "wb");
 
-			if (text)
-			{
-				fwrite((void *)cdbfile + cdbfile->attachment_offset, cdbfile->attachment_size, 1, text);
-				fclose(text);
-			}
-			else
-			{
-				perror("Failed to create attachment file");
-			}
+			text = fopen(outpath, "wb");
+			if (!text)
+				return;
+
+			if (!fwrite((void *)cdbfile + cdbfile->attachment_offset, cdbfile->attachment_size, 1, text))
+				return;
+			fclose(text);
 		}
 	}
 
