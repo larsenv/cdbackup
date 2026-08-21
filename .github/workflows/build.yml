@@ -11,11 +11,10 @@ jobs:
     container: devkitpro/devkitppc:latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install host tools and portlibs
+      - name: Install host tools
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3 git ca-certificates
-          dkp-pacman -Sy --noconfirm ppc-libpng ppc-zlib
       - name: Build controller libraries
         run: ./scripts/build_controller_portlibs.sh
       - name: Build all-controller DOL
