@@ -2,10 +2,88 @@
 #include <gccore.h>
 #include <ogc/pad.h>
 #include <wiikeyboard/usbkeyboard.h>
+#ifdef HAVE_WIIDRC
+#include <wiidrc/wiidrc.h>
+#endif
+#ifdef HAVE_WUPC
+#include <wupc/wupc.h>
+#endif
+#ifdef HAVE_SICKSAXIS
+#include <sicksaxis.h>
+#endif
 
 #include "pad.h"
 
 static uint32_t pad_buttons;
+#ifdef HAVE_SICKSAXIS
+static struct ss_device ds3;
+static bool ds3_initialized;
+static uint32_t ds3_previous;
+#endif
+
+static uint32_t map_classic(uint32_t buttons)
+{
+	uint32_t out = 0;
+	if (buttons & (WPAD_CLASSIC_BUTTON_ZR | WPAD_CLASSIC_BUTTON_PLUS)) out |= WPAD_BUTTON_PLUS;
+	if (buttons & (WPAD_CLASSIC_BUTTON_ZL | WPAD_CLASSIC_BUTTON_MINUS)) out |= WPAD_BUTTON_MINUS;
+	if (buttons & WPAD_CLASSIC_BUTTON_A) out |= WPAD_BUTTON_A;
+	if (buttons & WPAD_CLASSIC_BUTTON_B) out |= WPAD_BUTTON_B;
+	if (buttons & WPAD_CLASSIC_BUTTON_X) out |= WPAD_BUTTON_1;
+	if (buttons & WPAD_CLASSIC_BUTTON_Y) out |= WPAD_BUTTON_2;
+	if (buttons & WPAD_CLASSIC_BUTTON_HOME) out |= WPAD_BUTTON_HOME;
+	if (buttons & WPAD_CLASSIC_BUTTON_UP) out |= WPAD_BUTTON_UP;
+	if (buttons & WPAD_CLASSIC_BUTTON_DOWN) out |= WPAD_BUTTON_DOWN;
+	if (buttons & WPAD_CLASSIC_BUTTON_LEFT) out |= WPAD_BUTTON_LEFT;
+	if (buttons & WPAD_CLASSIC_BUTTON_RIGHT) out |= WPAD_BUTTON_RIGHT;
+	return out;
+}
+
+#ifdef HAVE_WIIDRC
+static uint32_t map_drc(uint32_t buttons)
+{
+	uint32_t out = 0;
+	if (buttons & (WIIDRC_BUTTON_R | WIIDRC_BUTTON_ZR | WIIDRC_BUTTON_PLUS)) out |= WPAD_BUTTON_PLUS;
+	if (buttons & (WIIDRC_BUTTON_L | WIIDRC_BUTTON_ZL | WIIDRC_BUTTON_MINUS)) out |= WPAD_BUTTON_MINUS;
+	if (buttons & WIIDRC_BUTTON_A) out |= WPAD_BUTTON_A;
+	if (buttons & WIIDRC_BUTTON_B) out |= WPAD_BUTTON_B;
+	if (buttons & WIIDRC_BUTTON_X) out |= WPAD_BUTTON_1;
+	if (buttons & WIIDRC_BUTTON_Y) out |= WPAD_BUTTON_2;
+	if (buttons & WIIDRC_BUTTON_HOME) out |= WPAD_BUTTON_HOME;
+	if (buttons & WIIDRC_BUTTON_UP) out |= WPAD_BUTTON_UP;
+	if (buttons & WIIDRC_BUTTON_DOWN) out |= WPAD_BUTTON_DOWN;
+	if (buttons & WIIDRC_BUTTON_LEFT) out |= WPAD_BUTTON_LEFT;
+	if (buttons & WIIDRC_BUTTON_RIGHT) out |= WPAD_BUTTON_RIGHT;
+	return out;
+}
+#endif
+
+#ifdef HAVE_SICKSAXIS
+static uint32_t poll_ds3(void)
+{
+	if (!ds3_initialized) return 0;
+	if (!ss_is_connected(&ds3)) {
+		ds3_previous = 0;
+		if (ss_open(&ds3) > 0) ss_start_reading(&ds3);
+		else return 0;
+	}
+	const struct SS_BUTTONS *b = &ds3.pad.buttons;
+	uint32_t held = 0;
+	if (b->start || b->R1 || b->R2) held |= WPAD_BUTTON_PLUS;
+	if (b->select || b->L1 || b->L2) held |= WPAD_BUTTON_MINUS;
+	if (b->cross) held |= WPAD_BUTTON_A;
+	if (b->circle) held |= WPAD_BUTTON_B;
+	if (b->square) held |= WPAD_BUTTON_1;
+	if (b->triangle) held |= WPAD_BUTTON_2;
+	if (b->PS) held |= WPAD_BUTTON_HOME;
+	if (b->up) held |= WPAD_BUTTON_UP;
+	if (b->down) held |= WPAD_BUTTON_DOWN;
+	if (b->left) held |= WPAD_BUTTON_LEFT;
+	if (b->right) held |= WPAD_BUTTON_RIGHT;
+	uint32_t down = held & ~ds3_previous;
+	ds3_previous = held;
+	return down;
+}
+#endif
 
 /* USB Keyboard stuffs */
 static lwp_t kbd_thread_hndl = LWP_THREAD_NULL;
@@ -87,10 +165,22 @@ void *kbd_thread(void *userp)
 
 void initpads()
 {
+#ifdef HAVE_WUPC
+	WUPC_Init();
+#endif
 	WPAD_Init();
 	PAD_Init();
 	USB_Initialize();
 	USBKeyboard_Initialize();
+#ifdef HAVE_WIIDRC
+	WiiDRC_Init();
+#endif
+#ifdef HAVE_SICKSAXIS
+	if (ss_init() >= 0 && ss_initialize(&ds3) >= 0) {
+		ds3_initialized = true;
+		if (ss_open(&ds3) > 0) ss_start_reading(&ds3);
+	}
+#endif
 
 	kbd_thread_should_run = true;
 	LWP_CreateThread(&kbd_thread_hndl, kbd_thread, 0, 0, 0x4000, 0x7F);
@@ -98,10 +188,27 @@ void initpads()
 
 void scanpads()
 {
+	uint32_t buttons = 0;
+	pad_buttons = 0;
+#ifdef HAVE_WUPC
+	WUPC_UpdateButtonStats();
+	for (int chan = 0; chan < 4; chan++) buttons |= WUPC_ButtonsDown(chan);
+	pad_buttons |= map_classic(buttons);
+#endif
+	buttons = 0;
 	WPAD_ScanPads();
+	for (int chan = 0; chan < 4; chan++) buttons |= WPAD_ButtonsDown(chan);
+	pad_buttons |= buttons | map_classic(buttons);
+#ifdef HAVE_WIIDRC
+	if (WiiDRC_Inited() && WiiDRC_Connected() && WiiDRC_ScanPads())
+		pad_buttons |= map_drc(WiiDRC_ButtonsDown());
+#endif
+#ifdef HAVE_SICKSAXIS
+	pad_buttons |= poll_ds3();
+#endif
 	PAD_ScanPads();
-	pad_buttons = WPAD_ButtonsDown(0);
-	u16 gcn_down = PAD_ButtonsDown(0);
+	u16 gcn_down = 0;
+	for (int chan = 0; chan < 4; chan++) gcn_down |= PAD_ButtonsDown(chan);
 
 	pad_buttons |= kbd_buttons;
 	kbd_buttons = 0;
@@ -130,6 +237,15 @@ void scanpads()
 
 void stoppads()
 {
+#ifdef HAVE_SICKSAXIS
+	if (ds3_initialized) {
+		if (ss_is_connected(&ds3)) ss_stop_reading(&ds3);
+		ss_close(&ds3);
+	}
+#endif
+#ifdef HAVE_WUPC
+	WUPC_Shutdown();
+#endif
 	WPAD_Shutdown();
 
 	kbd_thread_should_run = false;

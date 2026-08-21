@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
@@ -21,6 +22,7 @@
 
 #include "fatMounter.h"
 #include "menu.h"
+#include "pad.h"
 #include "fs.h"
 #include "vff.h"
 #include "cdbfile.h"

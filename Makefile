@@ -28,18 +28,35 @@ INCLUDES	:=	include
 CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS)
 
-LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
+LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map -Wl,--allow-multiple-definition
 
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:=	-lwiiuse -lwiikeyboard -lbte -lfat -logc -lm -lpng -lz -lpatcher
+LIBS	:=	-lpatcher -lwiiuse -lwiikeyboard -lbte -lfat -lpng -lz -logc -lm
+
+WITH_WIIDRC	?=	0
+WITH_WUPC	?=	0
+WITH_SICKSAXIS	?=	0
+ifeq ($(WITH_WIIDRC),1)
+ CFLAGS += -DHAVE_WIIDRC
+ LIBS := -lwiidrc $(LIBS)
+endif
+ifeq ($(WITH_WUPC),1)
+ CFLAGS += -DHAVE_WUPC
+ LDFLAGS += -Wl,-wrap,wiiuse_accept
+ LIBS := -lwupc $(LIBS)
+endif
+ifeq ($(WITH_SICKSAXIS),1)
+ CFLAGS += -DHAVE_SICKSAXIS
+ LIBS := -lsicksaxis $(LIBS)
+endif
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(PORTLIBS)
+LIBDIRS	:= $(CURDIR)/portlibs/ppc $(PORTLIBS)
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -90,7 +107,7 @@ export INCLUDE	:=	$(foreach dir,$(INCLUDES), -iquote $(CURDIR)/$(dir)) \
 #---------------------------------------------------------------------------------
 # build a list of library paths
 #---------------------------------------------------------------------------------
-export LIBPATHS	:= -L$(LIBOGC_LIB) $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+export LIBPATHS	:= -L$(CURDIR)/lib -L$(LIBOGC_LIB) $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
 .PHONY: $(BUILD) clean

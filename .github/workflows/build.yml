@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitppc:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host tools and portlibs
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3 git ca-certificates
+          dkp-pacman -Sy --noconfirm ppc-libpng ppc-zlib
+      - name: Build controller libraries
+        run: ./scripts/build_controller_portlibs.sh
+      - name: Build all-controller DOL
+        run: make WITH_WIIDRC=1 WITH_WUPC=1 WITH_SICKSAXIS=1 PORTLIBS=/opt/devkitpro/portlibs/ppc
+      - name: Package application
+        run: make pack WITH_WIIDRC=1 WITH_WUPC=1 WITH_SICKSAXIS=1 PORTLIBS=/opt/devkitpro/portlibs/ppc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cdbackup
+          path: |
+            cdbackup.dol
+            cdbackup.zip

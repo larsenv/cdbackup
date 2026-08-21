@@ -18,6 +18,7 @@
 #include <setjmp.h>
 
 #include "config.h"
+#include "list.h"
 
 #include "converter/converter.h"
 

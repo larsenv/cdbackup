@@ -1,4 +1,9 @@
 .*/
+!/.github/
+!/.github/workflows/
+!/.github/workflows/build.yml
 build/
 *.dol
 *.elf
+portlibs/
+*.zip
